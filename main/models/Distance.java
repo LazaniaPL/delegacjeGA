@@ -20,4 +20,9 @@ public class Distance implements Comparable<Distance>{
         return Double.compare(this.kilometres,o.kilometres);
     }
 
+    @Override
+    public boolean equals(Object obj) {
+        return this.start == ((Distance)obj).start && this.end == ((Distance)obj).end;
+    }
+
 }

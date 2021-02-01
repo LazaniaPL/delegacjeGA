@@ -16,7 +16,7 @@ public class Solver {
     private ArrayList<Delegation> bestSolution;
     private double bestFitness;
     private ArrayList<ArrayList<Delegation>> population = new ArrayList<>();
-    private double meanDistance;
+    private int maxDelegations = 0;
 
     private double optimalTotalCost;
     private double[][] distances;
@@ -29,6 +29,20 @@ public class Solver {
         this.citiesStart = citiesStart;
         this.citiesEnd = citiesEnd;
         bestFitness = optimalTotalCost;
+
+        if (optimalTotalCost <= 500) {
+            maxDelegations = 1;
+        } else if (optimalTotalCost <= 1000) {
+            maxDelegations = 2;
+        } else if (optimalTotalCost <= 1500) {
+            maxDelegations = 3;
+        } else if (optimalTotalCost <= 2000) {
+            maxDelegations = 4;
+        } else if (optimalTotalCost <= 2500) {
+            maxDelegations = 5;
+        } else {
+            maxDelegations = 6;
+        }
 
         generateInitialPopulation();
     }
@@ -66,7 +80,6 @@ public class Solver {
     private void generateInitialPopulation() {
         SecureRandom rand = new SecureRandom();
         ArrayList<Distance> distancesList = generateDistancesList();
-        meanDistance = distancesList.stream().mapToDouble(val -> val.kilometres).average().orElse(0.0);
         Collections.sort(distancesList);
 
         for (int i = 0; i < populationSize / 2; i++) {
@@ -79,9 +92,10 @@ public class Solver {
             double currentFitness = checkFitness(proposedSolutionRandom);
 
             // Generate Delegations with distinct distances and stop when fitness drops
-            // beneath 200 or starts to grow again (0 check for the first Delegation because
-            // we're starting from empty list)
-            while (currentFitness <= previousFitness && (currentFitness > 200 || currentFitness == optimalTotalCost)) {
+            // beneath 200 or starts to grow again (optimalTotalCost check for the first Delegation because
+            // we're starting from empty list and delegations amount check to not generate too many)
+            int delCount = 0;
+            while (currentFitness <= previousFitness && (currentFitness > 200 || currentFitness == optimalTotalCost) && delCount < maxDelegations) {
                 int days = rand.nextInt(4) + 2;
                 int distanceIndex = rand.nextInt(distancesList.size());
 
@@ -96,21 +110,19 @@ public class Solver {
 
                 previousFitness = currentFitness;
                 currentFitness = checkFitness(proposedSolutionRandom);
+                delCount++;
             }
             population.add(proposedSolutionRandom);
 
             // Generate deterministic solution
-            int delegationCount = (int) optimalTotalCost / (int) meanDistance > 0
-                    ? (int) optimalTotalCost / (int) meanDistance
-                    : 1;
-            int subDistanceListSize = distancesList.size() / delegationCount;
+            int subDistanceListSize = distancesList.size() / maxDelegations;
             usedPoints.clear();
 
             // Generate Delegations where number of them is decided by how many mean-sized
             // trips can worker make based on optimal cost
             // Then each Delegation is taken from another partition of availableDistances eg
             // (shortTrip, mediumLenghtTrip, longTrip)
-            for (int j = 0; j < delegationCount; j++) {
+            for (int j = 0; j < maxDelegations; j++) {
                 int days = rand.nextInt(4) + 2;
                 proposedSolutionDeterministic.add(
                         new Delegation(distancesList.get(rand.nextInt(subDistanceListSize) + j * subDistanceListSize),
@@ -144,9 +156,21 @@ public class Solver {
      */
     private double[] calculateFitnesses() {
         double[] newFitnesses = new double[populationSize];
+        ArrayList<Distance> distanceMonitor = new ArrayList<>();
 
         for (int i = 0; i < populationSize; i++) {
             newFitnesses[i] = checkFitness(population.get(i));
+
+            //Penalty for repeating delegation
+            for(Delegation it : population.get(i)){
+                if(!distanceMonitor.contains(it.distance)){
+                    distanceMonitor.add(it.distance);
+                } else {
+                    newFitnesses[i] += 10000;
+                }
+            }
+
+            distanceMonitor.clear();
 
             if (newFitnesses[i] < bestFitness) {
                 bestFitness = newFitnesses[i];
@@ -192,9 +216,10 @@ public class Solver {
         SecureRandom rand = new SecureRandom();
 
         int maxSize = delegation1.size() >= delegation2.size() ? delegation2.size() : delegation1.size();
-        int swapIndex = rand.nextInt(maxSize);
 
+        int swapIndex = rand.nextInt(maxSize);
         Delegation swap = delegation1.get(swapIndex);
+        
         delegation1.set(swapIndex, delegation2.get(swapIndex));
         delegation2.set(swapIndex, swap);
 
@@ -362,6 +387,11 @@ public class Solver {
      * @return Mutated list of delegations
      */
     private ArrayList<Delegation> splitMutation(ArrayList<Delegation> delegations) {
+
+        if(delegations.size() >= maxDelegations){
+            return delegations;
+        }
+
         ArrayList<Distance> availableDistances = generateDistancesList();
         ArrayList<Distance> takenDistances = new ArrayList<>();
         Delegation max = null;
@@ -420,8 +450,8 @@ public class Solver {
      * -crossover: -- delegationCrossover = 30% -- daysCrossover = 35% --
      * mealsCrossover = 35%
      * 
-     * -mutation: (15%) -- daysMutation = 35% -- mealsMutation = 35% --
-     * mergeMutation = 15% -- splitMutation = 15%
+     * -mutation: (15%) -- daysMutation = 40% -- mealsMutation = 40% --
+     * mergeMutation = 10% -- splitMutation = 10%
      * 
      * @param milliseconds
      * @param epsilon
@@ -468,16 +498,16 @@ public class Solver {
                 for (int i = rand.nextInt(5); i < 5; i++) {
                     mutation = rand.nextInt(100);
 
-                    if (mutation < 15) {
+                    if (mutation < 10) {
                         mutation = rand.nextInt(populationSize);
                         newPopulation.set(mutation, splitMutation(newPopulation.get(mutation)));
-                    } else if (mutation >= 15 && mutation < 50) {
+                    } else if (mutation >= 10 && mutation < 50) {
                         mutation = rand.nextInt(populationSize);
                         ArrayList<Delegation> mutatingSolution = newPopulation.get(mutation);
                         int delegationIndex = rand.nextInt(mutatingSolution.size());
                         mutatingSolution.set(delegationIndex, daysMutation(mutatingSolution.get(delegationIndex)));
                         newPopulation.set(mutation, mutatingSolution);
-                    } else if (mutation >= 50 && mutation < 85) {
+                    } else if (mutation >= 50 && mutation < 90) {
                         mutation = rand.nextInt(populationSize);
                         ArrayList<Delegation> mutatingSolution = newPopulation.get(mutation);
                         int delegationIndex = rand.nextInt(mutatingSolution.size());
