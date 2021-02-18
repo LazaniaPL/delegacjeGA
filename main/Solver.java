@@ -17,18 +17,23 @@ public class Solver {
     private double bestFitness;
     private ArrayList<ArrayList<Delegation>> population = new ArrayList<>();
     private int maxDelegations = 0;
+    private int maxMeals;
 
     private double optimalTotalCost;
     private double[][] distances;
+    private int[][] durations;
     private String[] citiesStart;
     private String[] citiesEnd;
 
-    public Solver(double optimalTotalCost, double[][] distances, String[] citiesStart, String[] citiesEnd) {
+    public Solver(double optimalTotalCost, double[][] distances, int[][] durations, String[] citiesStart,
+            String[] citiesEnd, int meals) {
         this.optimalTotalCost = optimalTotalCost;
         this.distances = distances;
+        this.durations = durations;
         this.citiesStart = citiesStart;
         this.citiesEnd = citiesEnd;
         bestFitness = optimalTotalCost;
+        maxMeals = meals;
 
         if (optimalTotalCost <= 500) {
             maxDelegations = 1;
@@ -67,7 +72,7 @@ public class Solver {
             for (int j = 0; j < citiesEnd.length; j++) {
                 if (i == j)
                     continue;
-                distancesList.add(new Distance(distances[i][j], i, j, citiesStart[i], citiesEnd[j]));
+                distancesList.add(new Distance(distances[i][j], durations[i][j], i, j, citiesStart[i], citiesEnd[j]));
             }
         }
 
@@ -92,12 +97,17 @@ public class Solver {
             double currentFitness = checkFitness(proposedSolutionRandom);
 
             // Generate Delegations with distinct distances and stop when fitness drops
-            // beneath 200 or starts to grow again (optimalTotalCost check for the first Delegation because
-            // we're starting from empty list and delegations amount check to not generate too many)
+            // beneath 200 or starts to grow again (optimalTotalCost check for the first
+            // Delegation because
+            // we're starting from empty list and delegations amount check to not generate
+            // too many)
             int delCount = 0;
-            while (currentFitness <= previousFitness && (currentFitness > 200 || currentFitness == optimalTotalCost) && delCount < maxDelegations) {
+            while (currentFitness <= previousFitness && (currentFitness > 200 || currentFitness == optimalTotalCost)
+                    && delCount < maxDelegations) {
                 int days = rand.nextInt(4) + 2;
                 int distanceIndex = rand.nextInt(distancesList.size());
+                days = distancesList.get(distanceIndex).duration.toHoursPart() < 2 ? 1 : days;
+                int reduction = 4 * days > maxMeals ? maxMeals : 4 * days;
 
                 if (!usedPoints.contains(distanceIndex)) {
                     usedPoints.add(distanceIndex);
@@ -106,7 +116,7 @@ public class Solver {
                 }
 
                 proposedSolutionRandom
-                        .add(new Delegation(distancesList.get(distanceIndex), days, rand.nextInt(4 * days + 1)));
+                        .add(new Delegation(distancesList.get(distanceIndex), days, rand.nextInt(reduction + 1)));
 
                 previousFitness = currentFitness;
                 currentFitness = checkFitness(proposedSolutionRandom);
@@ -124,9 +134,11 @@ public class Solver {
             // (shortTrip, mediumLenghtTrip, longTrip)
             for (int j = 0; j < maxDelegations; j++) {
                 int days = rand.nextInt(4) + 2;
-                proposedSolutionDeterministic.add(
-                        new Delegation(distancesList.get(rand.nextInt(subDistanceListSize) + j * subDistanceListSize),
-                                days, rand.nextInt(4 * days + 1)));
+                int reduction = 4 * days > maxMeals ? maxMeals : 4 * days;
+                int distanceIndex = rand.nextInt(subDistanceListSize) + j * subDistanceListSize;
+                days = distancesList.get(distanceIndex).duration.toHoursPart() < 2 ? 1 : days;
+                proposedSolutionDeterministic
+                        .add(new Delegation(distancesList.get(distanceIndex), days, rand.nextInt(reduction + 1)));
             }
             population.add(proposedSolutionDeterministic);
         }
@@ -161,9 +173,9 @@ public class Solver {
         for (int i = 0; i < populationSize; i++) {
             newFitnesses[i] = checkFitness(population.get(i));
 
-            //Penalty for repeating delegation
-            for(Delegation it : population.get(i)){
-                if(!distanceMonitor.contains(it.distance)){
+            // Penalty for repeating delegation
+            for (Delegation it : population.get(i)) {
+                if (!distanceMonitor.contains(it.distance)) {
                     distanceMonitor.add(it.distance);
                 } else {
                     newFitnesses[i] += 10000;
@@ -219,7 +231,7 @@ public class Solver {
 
         int swapIndex = rand.nextInt(maxSize);
         Delegation swap = delegation1.get(swapIndex);
-        
+
         delegation1.set(swapIndex, delegation2.get(swapIndex));
         delegation2.set(swapIndex, swap);
 
@@ -247,12 +259,15 @@ public class Solver {
 
         Delegation swap = delegation1.get(swapIndex);
         int daysSwap = swap.days;
-        swap.days = delegation2.get(swapIndex).days;
-        swap.mealsReduction = swap.mealsReduction > 4*swap.days ? 4*swap.days : swap.mealsReduction;
+        swap.days = swap.distance.duration.toHoursPart() < 2 ? 1 : delegation2.get(swapIndex).days;
+        int reduction = 4 * swap.days > maxMeals ? maxMeals : 4 * swap.days;
+        swap.mealsReduction = swap.mealsReduction > reduction ? reduction : swap.mealsReduction;
         delegation1.set(swapIndex, swap);
+
         swap = delegation2.get(swapIndex);
-        swap.days = daysSwap;
-        swap.mealsReduction = swap.mealsReduction > 4*swap.days ? 4*swap.days : swap.mealsReduction;
+        swap.days = swap.distance.duration.toHoursPart() < 2 ? 1 : daysSwap;
+        reduction = 4 * swap.days > maxMeals ? maxMeals : 4 * swap.days;
+        swap.mealsReduction = swap.mealsReduction > reduction ? reduction : swap.mealsReduction;
         delegation2.set(swapIndex, swap);
 
         results.add(delegation1);
@@ -279,10 +294,14 @@ public class Solver {
 
         Delegation swap = delegation1.get(swapIndex);
         int mealsSwap = swap.mealsReduction;
-        swap.mealsReduction = delegation2.get(swapIndex).mealsReduction > 4*swap.days ? 4*swap.days : delegation2.get(swapIndex).mealsReduction;
+        int reduction = 4 * swap.days > maxMeals ? maxMeals : 4 * swap.days;
+        swap.mealsReduction = delegation2.get(swapIndex).mealsReduction > reduction ? reduction
+                : delegation2.get(swapIndex).mealsReduction;
         delegation1.set(swapIndex, swap);
+
         swap = delegation2.get(swapIndex);
-        swap.mealsReduction = mealsSwap > 4*swap.days ? 4*swap.days : mealsSwap;
+        reduction = 4 * swap.days > maxMeals ? maxMeals : 4 * swap.days;
+        swap.mealsReduction = mealsSwap > reduction ? reduction : mealsSwap;
         delegation2.set(swapIndex, swap);
 
         results.add(delegation1);
@@ -299,7 +318,8 @@ public class Solver {
      */
     private Delegation mealsMutation(Delegation delegation) {
         SecureRandom rand = new SecureRandom();
-        delegation.mealsReduction = rand.nextInt(4 * delegation.days + 1);
+        int reduction = 4 * delegation.days > maxMeals ? maxMeals : 4 * delegation.days;
+        delegation.mealsReduction = rand.nextInt(reduction + 1);
 
         return delegation;
     }
@@ -312,8 +332,9 @@ public class Solver {
      */
     private Delegation daysMutation(Delegation delegation) {
         SecureRandom rand = new SecureRandom();
-        delegation.days = rand.nextInt(4) + 2;
-        delegation.mealsReduction = delegation.mealsReduction > 4*delegation.days ? 4*delegation.days : delegation.mealsReduction;
+        delegation.days = delegation.distance.duration.toHoursPart() < 2 ? 1 : rand.nextInt(4) + 2;
+        int reduction = 4 * delegation.days > maxMeals ? maxMeals : 4 * delegation.days;
+        delegation.mealsReduction = delegation.mealsReduction > reduction ? reduction : delegation.mealsReduction;
 
         return delegation;
     }
@@ -365,12 +386,17 @@ public class Solver {
             Distance newDistance = availableDistances.isEmpty() ? max : availableDistances.get(0);
 
             // Merge delegations to one
-            int reduction = min2.mealsReduction > 4*min.days ? 4*min.days : min2.mealsReduction;
+            min.days = newDistance.duration.toHoursPart() < 2 ? 1 : min.days;
+            int reduction = min2.mealsReduction > 4 * min.days ? 4 * min.days : min2.mealsReduction;
+            reduction = reduction > maxMeals ? maxMeals : reduction;
             Delegation merged = new Delegation(newDistance, min.days, reduction);
 
             delegations.add(merged);
         } catch (IndexOutOfBoundsException e) {
-            Delegation merged = new Delegation(min2.distance, min.days, min.mealsReduction);
+            min.days = min2.distance.duration.toHoursPart() < 2 ? 1 : min.days;
+            int reduction = min.mealsReduction > 4 * min.days ? 4 * min.days : min.mealsReduction;
+            reduction = reduction > maxMeals ? maxMeals : reduction;
+            Delegation merged = new Delegation(min2.distance, min.days, reduction);
             delegations.add(merged);
         }
 
@@ -388,7 +414,7 @@ public class Solver {
      */
     private ArrayList<Delegation> splitMutation(ArrayList<Delegation> delegations) {
 
-        if(delegations.size() >= maxDelegations){
+        if (delegations.size() >= maxDelegations) {
             return delegations;
         }
 
@@ -428,8 +454,17 @@ public class Solver {
                     : availableDistances.get(availableDistances.size() - 2);
 
             // Merge delegations to one
-            Delegation split = new Delegation(newDistance, max.days, max.mealsReduction);
-            Delegation split2 = new Delegation(newDistance2, max.days, max.mealsReduction);
+            int days1 = newDistance.duration.toHoursPart() < 2 ? 1 : max.days;
+            int days2 = newDistance2.duration.toHoursPart() < 2 ? 1 : max.days;
+
+            int mealsReduction1 = 4 * days1 > maxMeals ? maxMeals : 4 * days1;
+            int mealsReduction2 = 4 * days2 > maxMeals ? maxMeals : 4 * days2;
+
+            mealsReduction1 = max.mealsReduction > mealsReduction1 ? mealsReduction1 : max.mealsReduction;
+            mealsReduction2 = max.mealsReduction > mealsReduction2 ? mealsReduction2 : max.mealsReduction;
+
+            Delegation split = new Delegation(newDistance, max.days, mealsReduction1);
+            Delegation split2 = new Delegation(newDistance2, max.days, mealsReduction2);
             delegations.add(split);
             delegations.add(split2);
         } catch (IndexOutOfBoundsException e) {

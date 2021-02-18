@@ -13,11 +13,13 @@ public class Delegation{
     }
 
     public double delegationCost(){
-        return 2.0*distance.kilometres*Prices.perKilometre + days*Prices.perDay - Prices.oneNightReduction - mealsReduction*Prices.perMeal;
+        return 2.0 * distance.kilometres * Prices.perKilometre + days * Prices.perDay - Prices.oneNightReduction
+                - mealsReduction * Prices.perMeal;
     }
 
     public String toString(){
         return "start: " + distance.startName + "; end: " + distance.endName + "; km: " + distance.kilometres
+                + "; travel time: " + distance.duration.toHoursPart() + " h " + distance.duration.toMinutesPart() + " min"
                 + "; days: " + days + "; meals: " + mealsReduction;
     }
 

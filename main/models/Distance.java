@@ -1,14 +1,18 @@
 package main.models;
 
+import java.time.Duration;
+
 public class Distance implements Comparable<Distance>{
     public double kilometres;
+    public Duration duration;
     public int start;
     public int end;
     public String startName;
     public String endName;
 
-    public Distance(double kilometres, int start, int end, String startName, String endName){
+    public Distance(double kilometres, int duration, int start, int end, String startName, String endName){
         this.kilometres = kilometres;
+        this.duration = Duration.ofSeconds(duration);
         this.start = start;
         this.end = end;
         this.startName = startName;
