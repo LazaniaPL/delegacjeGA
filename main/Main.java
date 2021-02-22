@@ -29,18 +29,26 @@ public class Main {
         ArrayList<Delegation> optimal = optimalDelegations.solve(timeMillis, epsilon);
 
         double total = 0;
+        System.out.println("---------------------------------------");
         for(Delegation delegation : optimal){
             total += delegation.delegationCost();
             System.out.println("cost: " + delegation.delegationCost() + "; "+ delegation.toString());
         }
         System.out.println("TOTAL: " + total);
+        System.out.println("---------------------------------------");
+        /*
+        System.out.println("---------------------------------------");
+
         
 
-        /*
+        
         for(ArrayList<Delegation> delegations : optimalDelegations.getProposedSolutions()){
+            total = 0;
             for(Delegation delegation : delegations){
+                total += delegation.delegationCost();
                 System.out.println("cost: " + delegation.delegationCost() + "; "+ delegation.toString());
             }
+            System.out.println("TOTAL: " + total);
             System.out.println("---------------------------------------");
         }
         */
